@@ -89,6 +89,9 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
+
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 DMA_HandleTypeDef hdma_usart2_rx;
@@ -114,6 +117,13 @@ const osThreadAttr_t readerTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for sensorTask */
+osThreadId_t sensorTaskHandle;
+const osThreadAttr_t sensorTask_attributes = {
+  .name = "sensorTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* USER CODE BEGIN PV */
 uint8_t rxBuffer[RX_BUFFER_SIZE];
 uint8_t txBuffer[TX_BUFFER_SIZE];
@@ -130,6 +140,9 @@ uint8_t fingerPacket[64];
 
 uint16_t fingerAddress = 0xFFFFFFFF;
 
+static volatile uint32_t ADC_Buf[3];
+static volatile uint32_t ADC_Values[3];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -138,9 +151,11 @@ static void MX_GPIO_Init(void);
 static void MX_DMA_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
+static void MX_ADC1_Init(void);
 void StartDefaultTask(void *argument);
 void StartCommTask(void *argument);
 void StartReaderTask(void *argument);
+void StartSensorTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -148,7 +163,14 @@ void StartReaderTask(void *argument);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc){
 
+  if(hadc->Instance==ADC1){
+    ADC_Values[0] = ADC_Buf[0];
+    ADC_Values[1] = ADC_Buf[1];
+    ADC_Values[2] = ADC_Buf[2];
+  }
+}
 /* USER CODE END 0 */
 
 /**
@@ -183,6 +205,7 @@ int main(void)
   MX_DMA_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_UART_Receive_DMA(&huart2, rxBuffer, RX_BUFFER_SIZE);
   __HAL_UART_ENABLE_IT(&huart2, UART_IT_IDLE);
@@ -216,6 +239,9 @@ int main(void)
 
   /* creation of readerTask */
   readerTaskHandle = osThreadNew(StartReaderTask, NULL, &readerTask_attributes);
+
+  /* creation of sensorTask */
+  sensorTaskHandle = osThreadNew(StartSensorTask, NULL, &sensorTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -279,12 +305,78 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USB;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_USB;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
   PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL_DIV1_5;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Common config
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 3;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_55CYCLES_5;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_5;
+  sConfig.Rank = ADC_REGULAR_RANK_2;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_6;
+  sConfig.Rank = ADC_REGULAR_RANK_3;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
 }
 
 /**
@@ -363,6 +455,9 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
   /* DMA1_Channel6_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel6_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel6_IRQn);
@@ -819,6 +914,25 @@ void StartReaderTask(void *argument)
         osDelay(1000);  // Wait before next scan
     }
   /* USER CODE END StartReaderTask */
+}
+
+/* USER CODE BEGIN Header_StartSensorTask */
+/**
+* @brief Function implementing the sensorTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartSensorTask */
+void StartSensorTask(void *argument)
+{
+  /* USER CODE BEGIN StartSensorTask */
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)ADC_Buf,3);
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END StartSensorTask */
 }
 
 /**

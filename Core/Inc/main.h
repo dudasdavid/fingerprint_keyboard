@@ -57,6 +57,20 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define BLE_TX_Pin GPIO_PIN_2
+#define BLE_TX_GPIO_Port GPIOA
+#define BLE_RX_Pin GPIO_PIN_3
+#define BLE_RX_GPIO_Port GPIOA
+#define ADC_X_Pin GPIO_PIN_4
+#define ADC_X_GPIO_Port GPIOA
+#define ADC_Y_Pin GPIO_PIN_5
+#define ADC_Y_GPIO_Port GPIOA
+#define ADC_Z_Pin GPIO_PIN_6
+#define ADC_Z_GPIO_Port GPIOA
+#define FINGERPRINT_TX_Pin GPIO_PIN_10
+#define FINGERPRINT_TX_GPIO_Port GPIOB
+#define FINGERPRINT_RX_Pin GPIO_PIN_11
+#define FINGERPRINT_RX_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
