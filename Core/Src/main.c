@@ -39,8 +39,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define RX_BUFFER_SIZE 128
-#define TX_BUFFER_SIZE 128
+#define RX_BUFFER_SIZE 64
+#define TX_BUFFER_SIZE 64
 
 #define FLASH_USER_START_ADDR  ((uint32_t)0x0800FC00)
 

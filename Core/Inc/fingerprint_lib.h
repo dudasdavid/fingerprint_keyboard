@@ -15,7 +15,7 @@
 #include "cmsis_os.h"
 #include "stm32f1xx_hal.h"
 
-#define TX_BUFFER_SIZE 128
+#define TX_BUFFER_SIZE 64
 
 #define FINGERPRINT_OK 0x00
 #define FINGERPRINT_NOFINGER 0x02
