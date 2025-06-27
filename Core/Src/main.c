@@ -572,7 +572,65 @@ void writePasswordToFlash(const char *password)
 
     HAL_FLASH_Lock();
 }
+*/
+void writePasswordToFlash(const char *password)
+{
+    HAL_FLASH_Unlock();
 
+    // Erase the flash page
+    FLASH_EraseInitTypeDef eraseInit;
+    uint32_t pageError = 0;
+    eraseInit.TypeErase = FLASH_TYPEERASE_PAGES;
+    eraseInit.PageAddress = FLASH_USER_START_ADDR;
+    eraseInit.NbPages = 1;
+    if (HAL_FLASHEx_Erase(&eraseInit, &pageError) != HAL_OK)
+    {
+        HAL_FLASH_Lock();
+        return;
+    }
+
+    // Prepare AES encryption
+    struct AES_ctx ctx;
+    uint8_t key[16];
+    deriveKeyFromUID(key);
+
+    uint8_t iv[16];
+    generateIV(iv);
+
+    // Pad the password to 16-byte block (PKCS#7)
+    uint8_t buffer[64] = {0}; // MAX password size + padding
+    size_t len = strlen(password);
+    size_t padded_len = ((len / 16) + 1) * 16;
+
+    memcpy(buffer, password, len);
+    uint8_t pad = padded_len - len;
+    for (size_t i = len; i < padded_len; i++) buffer[i] = pad;
+
+    AES_init_ctx_iv(&ctx, key, iv);
+    AES_CTR_xcrypt_buffer(&ctx, buffer, padded_len);
+
+    // Write IV + encrypted password to flash
+    uint32_t addr = FLASH_USER_START_ADDR;
+
+    for (int i = 0; i < 16; i += 2) // write IV
+    {
+        uint16_t halfWord = iv[i] | (iv[i + 1] << 8);
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, halfWord);
+        addr += 2;
+    }
+
+    for (int i = 0; i < padded_len; i += 2) // write ciphertext
+    {
+        uint16_t halfWord = buffer[i] | (buffer[i + 1] << 8);
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, halfWord);
+        addr += 2;
+    }
+
+    HAL_FLASH_Lock();
+}
+
+
+/*
 void readPasswordFromFlash(char *password)
 {
     const uint8_t *data = (const uint8_t *)FLASH_USER_START_ADDR;
@@ -586,8 +644,48 @@ void readPasswordFromFlash(char *password)
     }
     password[MAX_PWD_SIZE - 1] = '\0'; // Safety null-termination
 }
+*/
+void readPasswordFromFlash(char *outPassword)
+{
+    uint8_t key[16], iv[16], encrypted[64];
+    deriveKeyFromUID(key);
 
+    const uint8_t *flash_ptr = (uint8_t *)FLASH_USER_START_ADDR;
 
+    // Read IV
+    memcpy(iv, flash_ptr, 16);
+    flash_ptr += 16;
+
+    // Read encrypted data
+    size_t i;
+    for (i = 0; i < 64; i++)
+    {
+        encrypted[i] = flash_ptr[i];
+        // Stop at block boundary with null-padding detection
+        if (i > 0 && encrypted[i] == 0x00 && (i % 16 == 0))
+            break;
+    }
+    size_t len = i;
+
+    // Decrypt
+    struct AES_ctx ctx;
+    AES_init_ctx_iv(&ctx, key, iv);
+    AES_CTR_xcrypt_buffer(&ctx, encrypted, len);
+
+    // Remove PKCS#7 padding
+    uint8_t pad = encrypted[len - 1];
+    if (pad <= 16)
+    {
+        encrypted[len - pad] = '\0';
+    }
+    else
+    {
+        encrypted[len - 1] = '\0';
+    }
+
+    strncpy(outPassword, (char *)encrypted, MAX_PWD_SIZE - 1);
+    outPassword[MAX_PWD_SIZE - 1] = '\0';
+}
 
 
 
