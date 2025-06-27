@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <math.h>
 #include "fingerprint_lib.h"
+#include "aes.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -174,7 +175,8 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  void aes_init_sbox();
+  //void aes_init_rsbox();
   /* USER CODE END Init */
 
   /* Configure the system clock */
