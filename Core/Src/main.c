@@ -28,6 +28,8 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
+#include "core_cm3.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -78,6 +80,12 @@
 #define FINGERPRINT_ADDR 0xFFFFFFFF
 
 #define FINGERPRINT_TIMEOUT 0xFF
+
+#define ADC_MAX         4095.0f
+#define V_REF           3.3f
+#define ZERO_G_VOLTAGE  1.65f
+#define SENSITIVITY     0.30f      // V/g for ADXL335
+#define G_TO_MS2        9.80665f
 
 //#define FLASH_PAGE_SIZE        ((uint16_t)0x400)   // 1KB on STM32F103
 #define MAX_PWD_SIZE           64                  // adjust as needed
@@ -142,6 +150,18 @@ uint16_t fingerAddress = 0xFFFFFFFF;
 
 static volatile uint32_t ADC_Buf[3];
 static volatile uint32_t ADC_Values[3];
+static float v_x = 0.0;
+static float v_y = 0.0;
+static float v_z = 0.0;
+static float a_x_g = 0.0;
+static float a_y_g = 0.0;
+static float a_z_g = 0.0;
+static float a_x = 0.0;
+static float a_y = 0.0;
+static float a_z = 0.0;
+static float a_mag = 0.0;
+
+static volatile uint32_t acc_timestamp = 0;
 
 /* USER CODE END PV */
 
@@ -657,6 +677,35 @@ void resetSensor(void)
     osDelay(1000);
 }
 
+void calculate_acceleration(void) {
+    // Convert ADC to voltage
+    v_x = (ADC_Values[0] / ADC_MAX) * V_REF;
+    v_y = (ADC_Values[1] / ADC_MAX) * V_REF;
+    v_z = (ADC_Values[2] / ADC_MAX) * V_REF;
+
+    // Convert voltage to acceleration in g
+    a_x_g = (v_x - ZERO_G_VOLTAGE) / SENSITIVITY;
+    a_y_g = (v_y - ZERO_G_VOLTAGE) / SENSITIVITY;
+    a_z_g = (v_z - ZERO_G_VOLTAGE) / SENSITIVITY;
+
+    // Convert g to m/s²
+    a_x = a_x_g * G_TO_MS2;
+    a_y = a_y_g * G_TO_MS2;
+    a_z = a_z_g * G_TO_MS2;
+
+    // Vector magnitude
+    a_mag = sqrtf(a_x * a_x + a_y * a_y + a_z * a_z);
+
+    // Print or use the values as needed
+    //printf("Accel (m/s²): X=%.2f Y=%.2f Z=%.2f | |A|=%.2f\n", a_x, a_y, a_z, a_mag);
+}
+
+int _write(int file, char *ptr, int len) {
+    for (int i = 0; i < len; i++) {
+        ITM_SendChar(*ptr++);
+    }
+    return len;
+}
 
 /* USER CODE END 4 */
 
@@ -848,6 +897,10 @@ void StartReaderTask(void *argument)
 	/* Infinite loop */
     for (;;)
     {
+    	if (HAL_GetTick() - acc_timestamp > 30000) {
+    		osDelay(200);
+    		continue;
+    	}
     	if (keyboardFlag)
     	{
     		osDelay(200);
@@ -899,6 +952,8 @@ void StartReaderTask(void *argument)
 
             // Set flag to type password
             keyboardFlag = true;
+            // Set accelerometer magnitude timestamp to 0 so reading turns off immediately after successful finger scanning
+            acc_timestamp = 0;
         }
         else if (p == FINGERPRINT_NOMATCH)
         {
@@ -930,7 +985,11 @@ void StartSensorTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+	calculate_acceleration();
+	if (a_mag > 20.0){
+		acc_timestamp = HAL_GetTick();
+	}
+    osDelay(10);
   }
   /* USER CODE END StartSensorTask */
 }
