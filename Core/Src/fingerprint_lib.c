@@ -93,19 +93,19 @@ void resetSensor(void)
         if (reply[9] == 0x00)
         {
             // Reset acknowledged
-            //snprintf(txBuffer, sizeof(txBuffer), "Sensor reset OK\n");
-            //HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
+            snprintf(txBuffer, sizeof(txBuffer), "Sensor reset OK\n");
+            HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
         }
         else
         {
-            //snprintf(txBuffer, sizeof(txBuffer), "Sensor reset error: 0x%02X\n", reply[9]);
-            //HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
+            snprintf(txBuffer, sizeof(txBuffer), "Sensor reset error: 0x%02X\n", reply[9]);
+            HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
         }
     }
     else
     {
-        //snprintf(txBuffer, sizeof(txBuffer), "Sensor reset: no response\n");
-        //HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
+        snprintf(txBuffer, sizeof(txBuffer), "Sensor reset: no response\n");
+        HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
     }
 
     // Wait for the sensor to reboot (approx 1s)

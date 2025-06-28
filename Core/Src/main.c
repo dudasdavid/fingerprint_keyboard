@@ -874,8 +874,8 @@ void StartCommTask(void *argument)
               if (strncmp((char*)rxBuffer, "PWD:", 4) == 0)
               {
                   char *pwdStart = (char*)rxBuffer + 4;
-                  //snprintf((char*)txBuffer, TX_BUFFER_SIZE, "OK:%.50s\n", rxBuffer+4);
-                  build_response(txBuffer, "OK:", pwdStart, 50);
+                  snprintf((char*)txBuffer, TX_BUFFER_SIZE, "OK:%.50s\n", rxBuffer+4);
+                  //build_response(txBuffer, "OK:", pwdStart, 50);
 
                   writePasswordToFlash(pwdStart);
                   strncpy(storedPassword, pwdStart, MAX_PWD_SIZE - 1);
@@ -883,19 +883,19 @@ void StartCommTask(void *argument)
               }
               else if (strncmp((char*)rxBuffer, "READ", 4) == 0)
               {
-                  //snprintf((char*)txBuffer, TX_BUFFER_SIZE, "READ:%.50s\n", storedPassword);
-            	  build_response(txBuffer, "READ:", storedPassword, 50);
+                  snprintf((char*)txBuffer, TX_BUFFER_SIZE, "READ:%.50s\n", storedPassword);
+            	  //build_response(txBuffer, "READ:", storedPassword, 50);
               }
               else if (strncmp((char*)rxBuffer, "SEND", 4) == 0)
               {
             	  keyboardFlag = true;
-                  //snprintf((char*)txBuffer, TX_BUFFER_SIZE, "SEND:%.50s\n", storedPassword);
-                  build_response(txBuffer, "SEND:", storedPassword, 50);
+                  snprintf((char*)txBuffer, TX_BUFFER_SIZE, "SEND:%.50s\n", storedPassword);
+                  //build_response(txBuffer, "SEND:", storedPassword, 50);
               }
               else
               {
-                  //snprintf((char*)txBuffer, TX_BUFFER_SIZE, "ERR:%.50s\n", rxBuffer);
-                  build_response(txBuffer, "ERR:", rxBuffer, 50);
+                  snprintf((char*)txBuffer, TX_BUFFER_SIZE, "ERR:%.50s\n", rxBuffer);
+                  //build_response(txBuffer, "ERR:", rxBuffer, 50);
               }
 
               // Send response
@@ -919,7 +919,7 @@ void StartCommTask(void *argument)
 void StartReaderTask(void *argument)
 {
   /* USER CODE BEGIN StartReaderTask */
-	char idStr[10];
+	//char idStr[10];
 	uint8_t error03Count = 0;
 	/* Infinite loop */
     for (;;)
@@ -941,16 +941,16 @@ void StartReaderTask(void *argument)
         }
         if (p != FINGERPRINT_OK)
         {
-            //snprintf(txBuffer, sizeof(txBuffer), "Image error: 0x%02X\n", p);
-            build_response(txBuffer, "Image error", ".", 50);
+            snprintf(txBuffer, sizeof(txBuffer), "Image error: 0x%02X\n", p);
+            //build_response(txBuffer, "Image error", ".", 50);
             HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
             osDelay(1000);
 
             error03Count++;
             if (error03Count >= 3)
             {
-                //snprintf(txBuffer, sizeof(txBuffer), "Too many image errors, resetting sensor...\n");
-                build_response(txBuffer, "Too many image errors, resetting", ".", 50);
+                snprintf(txBuffer, sizeof(txBuffer), "Too many image errors, resetting sensor...\n");
+                //build_response(txBuffer, "Too many image errors, resetting", ".", 50);
                 HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
 
                 //resetSensor();
@@ -966,8 +966,8 @@ void StartReaderTask(void *argument)
         p = image2Tz(1);
         if (p != FINGERPRINT_OK)
         {
-            //snprintf(txBuffer, sizeof(txBuffer), "Image conversion error: 0x%02X\n", p);
-            build_response(txBuffer, "Image conversion error", ".", 50);
+            snprintf(txBuffer, sizeof(txBuffer), "Image conversion error: 0x%02X\n", p);
+            //build_response(txBuffer, "Image conversion error", ".", 50);
             HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
             osDelay(1000);
             continue;
@@ -977,9 +977,9 @@ void StartReaderTask(void *argument)
         p = fingerFastSearch(&fingerID);
         if (p == FINGERPRINT_OK)
         {
-            //snprintf(txBuffer, sizeof(txBuffer), "Finger %d recognized\n", fingerID);
-        	itoa(fingerID, idStr, 10);
-        	build_response(txBuffer, "Finger recognized: ", idStr, 10);
+            snprintf(txBuffer, sizeof(txBuffer), "Finger %d recognized\n", fingerID);
+        	//itoa(fingerID, idStr, 10);
+        	//build_response(txBuffer, "Finger recognized: ", idStr, 10);
             HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
 
             // Set flag to type password
@@ -989,14 +989,14 @@ void StartReaderTask(void *argument)
         }
         else if (p == FINGERPRINT_NOMATCH)
         {
-            //snprintf(txBuffer, sizeof(txBuffer), "Finger not recognized\n");
-            build_response(txBuffer, "Finger not recognized", ".", 50);
+            snprintf(txBuffer, sizeof(txBuffer), "Finger not recognized\n");
+            //build_response(txBuffer, "Finger not recognized", ".", 50);
             HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
         }
         else
         {
-            //snprintf(txBuffer, sizeof(txBuffer), "Search error: 0x%02X\n", p);
-            build_response(txBuffer, "Search error", ".", 50);
+            snprintf(txBuffer, sizeof(txBuffer), "Search error: 0x%02X\n", p);
+            //build_response(txBuffer, "Search error", ".", 50);
             HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
         }
 
