@@ -51,11 +51,11 @@
 //#define NUM_ROUNDS 32
 
 
-#define ADC_MAX         4095
-#define V_REF_MV        3300       // 3.3V = 3300 mV
-#define ZERO_G_MV       1650       // 1.65V = 1650 mV (adjust to your sensor)
-#define SENSITIVITY_MV_PER_G 300   // 0.33V/g = 330 mV/g
-#define G_TO_MM_S2      9810       // 1g = 9.81 m/s² = 9810 mm/s²
+#define ADC_MAX         4095.0f
+#define V_REF           3.3f
+#define ZERO_G_VOLTAGE  1.65f
+#define SENSITIVITY     0.30f      // V/g for ADXL335
+#define G_TO_MS2        9.80665f
 
 //#define FLASH_PAGE_SIZE        ((uint16_t)0x400)   // 1KB on STM32F103
 #define MAX_PWD_SIZE           64                  // adjust as needed
@@ -120,16 +120,16 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 
 static volatile uint32_t ADC_Buf[3];
 static volatile uint32_t ADC_Values[3];
-static int32_t v_x = 0;
-static int32_t v_y = 0;
-static int32_t v_z = 0;
-static int32_t a_x_g = 0;
-static int32_t a_y_g = 0;
-static int32_t a_z_g = 0;
-static int32_t a_x = 0;
-static int32_t a_y = 0;
-static int32_t a_z = 0;
-static uint32_t a_mag = 0;
+static float v_x = 0.0;
+static float v_y = 0.0;
+static float v_z = 0.0;
+static float a_x_g = 0.0;
+static float a_y_g = 0.0;
+static float a_z_g = 0.0;
+static float a_x = 0.0;
+static float a_y = 0.0;
+static float a_z = 0.0;
+static float a_mag = 0.0;
 
 static volatile uint32_t acc_timestamp = 0;
 
@@ -725,26 +725,26 @@ void readPasswordFromFlash(char *outPassword)
 
 void calculate_acceleration(void) {
 
+    // Convert ADC to voltage
+    v_x = (ADC_Values[0] / ADC_MAX) * V_REF;
+    v_y = (ADC_Values[1] / ADC_MAX) * V_REF;
+    v_z = (ADC_Values[2] / ADC_MAX) * V_REF;
 
-    // Convert ADC to mV
-	v_x = (int32_t)ADC_Values[0] * V_REF_MV / ADC_MAX;
-	v_y = (int32_t)ADC_Values[1] * V_REF_MV / ADC_MAX;
-	v_z = (int32_t)ADC_Values[2] * V_REF_MV / ADC_MAX;
+    // Convert voltage to acceleration in g
+    a_x_g = (v_x - ZERO_G_VOLTAGE) / SENSITIVITY;
+    a_y_g = (v_y - ZERO_G_VOLTAGE) / SENSITIVITY;
+    a_z_g = (v_z - ZERO_G_VOLTAGE) / SENSITIVITY;
 
-    // Voltage to acceleration in milli-g (mg)
-	a_x_g = (v_x - ZERO_G_MV) * 1000 / SENSITIVITY_MV_PER_G;
-	a_y_g = (v_y - ZERO_G_MV) * 1000 / SENSITIVITY_MV_PER_G;
-	a_z_g = (v_z - ZERO_G_MV) * 1000 / SENSITIVITY_MV_PER_G;
+    // Convert g to m/s²
+    a_x = a_x_g * G_TO_MS2;
+    a_y = a_y_g * G_TO_MS2;
+    a_z = a_z_g * G_TO_MS2;
 
-    // mg to mm/s²
-	a_x = a_x_g * G_TO_MM_S2 / 1000;
-	a_y = a_y_g * G_TO_MM_S2 / 1000;
-	a_z = a_z_g * G_TO_MM_S2 / 1000;
+    // Vector magnitude
+    a_mag = sqrtf(a_x * a_x + a_y * a_y + a_z * a_z);
 
-    // Optional: compute magnitude squared (in mm²/s⁴)
-	a_mag = sqrt(a_x * a_x + a_y * a_y + a_z * a_z);
-
-    // Done! You can use or transmit the mm/s² or sqrt(a_mag_sq) if needed
+    // Print or use the values as needed
+    //printf("Accel (m/s²): X=%.2f Y=%.2f Z=%.2f | |A|=%.2f\n", a_x, a_y, a_z, a_mag);
 }
 
 /* USER CODE END 4 */
@@ -1037,7 +1037,7 @@ void StartSensorTask(void *argument)
   for(;;)
   {
 	calculate_acceleration();
-	if (a_mag > 20000){
+	if (a_mag > 20.0){
 		acc_timestamp = HAL_GetTick();
 	}
     osDelay(10);
