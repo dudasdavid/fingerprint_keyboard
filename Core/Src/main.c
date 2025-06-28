@@ -1039,6 +1039,7 @@ void StartReaderTask(void *argument)
             snprintf(txBuffer, sizeof(txBuffer), "Finger not recognized\n");
             //build_response(txBuffer, "Finger not recognized", ".", 50);
             HAL_UART_Transmit(&huart2, (uint8_t*)txBuffer, strlen(txBuffer), HAL_MAX_DELAY);
+            acc_timestamp = HAL_GetTick(); // misuse this timestamp to avoid going back sleeping while trying to log in
         }
         else
         {
@@ -1049,6 +1050,7 @@ void StartReaderTask(void *argument)
 
         osDelay(1000);  // Wait before next scan
     }
+
   /* USER CODE END StartReaderTask */
 }
 
