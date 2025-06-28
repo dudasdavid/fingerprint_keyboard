@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <math.h>
 #include "fingerprint_lib.h"
+#include "aes.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -44,9 +45,10 @@
 #define TX_BUFFER_SIZE 64
 
 #define FLASH_USER_START_ADDR  ((uint32_t)0x0801FC00)
-#define MAX_PWD_SIZE 48
-#define BLOCK_SIZE 8
-#define NUM_ROUNDS 32
+
+//#define MAX_PWD_SIZE 48
+//#define BLOCK_SIZE 8
+//#define NUM_ROUNDS 32
 
 
 #define ADC_MAX         4095
@@ -531,18 +533,27 @@ void xtea_decrypt(uint32_t v[2], const uint32_t key[4], unsigned int rounds) {
     v[1] = v1;
 }
 
-void deriveKeyFromUID(uint32_t key[4])
+void deriveKeyFromUID(uint8_t *key)
 {
-    uint8_t *uid = (uint8_t *)0x1FFFF7E8;
-    for (int i = 0; i < 4; i++)
-        key[i] = ((uint32_t *)uid)[i % 3] ^ 0xA5A5A5A5;
+    uint8_t *uid = (uint8_t *)0x1FFFF7E8; // STM32F103 UID base address
+    for (int i = 0; i < 12; i++)
+    {
+        key[i] = uid[i] ^ 0xA5; // basic XOR obfuscation
+    }
+    key[12] = 0xDE;
+    key[13] = 0xAD;
+    key[14] = 0xBE;
+    key[15] = 0xEF;
 }
 
-void generateIV(uint32_t iv[2])
+void generateIV(uint8_t *iv)
 {
-    srand(HAL_GetTick());
-    iv[0] = rand();
-    iv[1] = rand();
+    uint32_t seed = HAL_GetTick(); // not cryptographically secure, but okay for basic protection
+    srand(seed);
+    for (int i = 0; i < 16; i++)
+    {
+        iv[i] = rand() & 0xFF;
+    }
 }
 
 /*
@@ -596,6 +607,7 @@ void writePasswordToFlash(const char *password)
 {
     HAL_FLASH_Unlock();
 
+    // Erase the flash page
     FLASH_EraseInitTypeDef eraseInit;
     uint32_t pageError = 0;
     eraseInit.TypeErase = FLASH_TYPEERASE_PAGES;
@@ -607,42 +619,41 @@ void writePasswordToFlash(const char *password)
         return;
     }
 
-    // Derive key and IV
-    uint32_t key[4];
+    // Prepare AES encryption
+    struct AES_ctx ctx;
+    uint8_t key[16];
     deriveKeyFromUID(key);
 
-    uint32_t iv[2];
+    uint8_t iv[16];
     generateIV(iv);
 
-    // Store IV
-    uint32_t addr = FLASH_USER_START_ADDR;
-    HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, iv[0]); addr += 4;
-    HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, iv[1]); addr += 4;
-
-    // Pad and encrypt password
-    uint8_t padded[64] = {0};
+    // Pad the password to 16-byte block (PKCS#7)
+    uint8_t buffer[64] = {0}; // MAX password size + padding
     size_t len = strlen(password);
-    size_t padded_len = ((len + 1 + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE;
-    memcpy(padded, password, len);
-    padded[len] = 0x00; // null-terminator
+    size_t padded_len = ((len / 16) + 1) * 16;
 
-    uint32_t prev[2] = {iv[0], iv[1]};
+    memcpy(buffer, password, len);
+    uint8_t pad = padded_len - len;
+    for (size_t i = len; i < padded_len; i++) buffer[i] = pad;
 
-    for (size_t i = 0; i < padded_len; i += BLOCK_SIZE)
+    AES_init_ctx_iv(&ctx, key, iv);
+    AES_CBC_encrypt_buffer(&ctx, buffer, padded_len);
+
+    // Write IV + encrypted password to flash
+    uint32_t addr = FLASH_USER_START_ADDR;
+
+    for (int i = 0; i < 16; i += 2) // write IV
     {
-        uint32_t block[2];
-        memcpy(&block, &padded[i], BLOCK_SIZE);
+        uint16_t halfWord = iv[i] | (iv[i + 1] << 8);
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, halfWord);
+        addr += 2;
+    }
 
-        // CBC XOR
-        block[0] ^= prev[0];
-        block[1] ^= prev[1];
-
-        xtea_encrypt(block, key, NUM_ROUNDS);
-        HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, block[0]); addr += 4;
-        HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, addr, block[1]); addr += 4;
-
-        prev[0] = block[0];
-        prev[1] = block[1];
+    for (int i = 0; i < padded_len; i += 2) // write ciphertext
+    {
+        uint16_t halfWord = buffer[i] | (buffer[i + 1] << 8);
+        HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, halfWord);
+        addr += 2;
     }
 
     HAL_FLASH_Lock();
@@ -666,41 +677,43 @@ void readPasswordFromFlash(char *password)
 */
 void readPasswordFromFlash(char *outPassword)
 {
-    uint32_t key[4];
+    uint8_t key[16], iv[16], encrypted[64];
     deriveKeyFromUID(key);
 
-    const uint32_t *flash_ptr = (uint32_t *)FLASH_USER_START_ADDR;
+    const uint8_t *flash_ptr = (uint8_t *)FLASH_USER_START_ADDR;
 
-    uint32_t iv[2];
-    iv[0] = flash_ptr[0];
-    iv[1] = flash_ptr[1];
-    flash_ptr += 2;
+    // Read IV
+    memcpy(iv, flash_ptr, 16);
+    flash_ptr += 16;
 
-    uint32_t prev[2] = {iv[0], iv[1]};
-    uint8_t decrypted[64] = {0};
-    size_t byte_index = 0;
-
-    while (byte_index + BLOCK_SIZE <= sizeof(decrypted))
+    // Read encrypted data
+    size_t i;
+    for (i = 0; i < 64; i++)
     {
-        uint32_t block[2] = {flash_ptr[0], flash_ptr[1]};
-        flash_ptr += 2;
+        encrypted[i] = flash_ptr[i];
+        // Stop at block boundary with null-padding detection
+        if (i > 0 && encrypted[i] == 0x00 && (i % 16 == 0))
+            break;
+    }
+    size_t len = i;
 
-        uint32_t cipher_copy[2] = {block[0], block[1]};
-        xtea_decrypt(block, key, NUM_ROUNDS);
+    // Decrypt
+    struct AES_ctx ctx;
+    AES_init_ctx_iv(&ctx, key, iv);
+    AES_CBC_decrypt_buffer(&ctx, encrypted, len);
 
-        // CBC XOR
-        block[0] ^= prev[0];
-        block[1] ^= prev[1];
-        prev[0] = cipher_copy[0];
-        prev[1] = cipher_copy[1];
-
-        memcpy(&decrypted[byte_index], block, BLOCK_SIZE);
-        if (memchr(&decrypted[byte_index], '\0', BLOCK_SIZE)) break;
-
-        byte_index += BLOCK_SIZE;
+    // Remove PKCS#7 padding
+    uint8_t pad = encrypted[len - 1];
+    if (pad <= 16)
+    {
+        encrypted[len - pad] = '\0';
+    }
+    else
+    {
+        encrypted[len - 1] = '\0';
     }
 
-    strncpy(outPassword, (char *)decrypted, MAX_PWD_SIZE - 1);
+    strncpy(outPassword, (char *)encrypted, MAX_PWD_SIZE - 1);
     outPassword[MAX_PWD_SIZE - 1] = '\0';
 }
 
