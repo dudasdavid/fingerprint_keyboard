@@ -111,6 +111,8 @@ volatile uint16_t rxLen = 0;
 char storedPassword[MAX_PWD_SIZE];
 
 volatile bool keyboardFlag = false;
+volatile bool enrollFlag = false;
+
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
@@ -909,6 +911,29 @@ void StartCommTask(void *argument)
                   snprintf((char*)txBuffer, TX_BUFFER_SIZE, "SEND:%.50s\n", storedPassword);
                   //build_response(txBuffer, "SEND:", storedPassword, 50);
               }
+              else if (strncmp((char*)rxBuffer, "ENROLL:", 7) == 0)
+              {
+                  char ch = rxBuffer[7];
+
+                  // Check if it's a digit between '1' and '9'
+                  if (ch >= '1' && ch <= '9')
+                  {
+                      uint8_t id = ch - '0';
+
+                      snprintf(txBuffer, TX_BUFFER_SIZE, "ENROLL FINGER:%d\n", id);
+                      HAL_UART_Transmit(&huart2, txBuffer, strlen((char*)txBuffer), HAL_MAX_DELAY);
+                      enrollFlag = true;
+                      osDelay(500);
+                      enrollFinger(id);  // start enrollment
+                      snprintf(txBuffer, TX_BUFFER_SIZE, "ENROLL FINISHED:%d\n", id);
+                      osDelay(500);
+                      enrollFlag = false;
+                  }
+                  else
+                  {
+                      snprintf(txBuffer, TX_BUFFER_SIZE, "ENROLL FINGER: ERROR\n");
+                  }
+              }
               else
               {
                   snprintf((char*)txBuffer, TX_BUFFER_SIZE, "ERR:%.50s\n", rxBuffer);
@@ -942,6 +967,11 @@ void StartReaderTask(void *argument)
     for (;;)
     {
     	if (HAL_GetTick() - acc_timestamp > 30000) {
+    		osDelay(200);
+    		continue;
+    	}
+    	if (enrollFlag)
+    	{
     		osDelay(200);
     		continue;
     	}

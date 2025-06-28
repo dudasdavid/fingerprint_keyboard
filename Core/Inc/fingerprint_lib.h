@@ -51,6 +51,9 @@
 #define FINGERPRINT_RESET 0x0D
 #define FINGERPRINT_ADDR 0xFFFFFFFF
 
+#define FINGERPRINT_CREATE_MODEL 0x05
+#define FINGERPRINT_STORE 0x06
+
 #define FINGERPRINT_TIMEOUT 0xFF
 
 
@@ -61,3 +64,4 @@ uint8_t getImage(void);
 uint8_t image2Tz(uint8_t slot);
 uint8_t fingerFastSearch(uint16_t *fingerID);
 void resetSensor(void);
+uint8_t enrollFinger(uint16_t id);
