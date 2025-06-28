@@ -631,25 +631,31 @@ void writePasswordToFlash(const char *password)
     uint8_t buffer[64] = {0}; // MAX password size + padding
     size_t len = strlen(password);
     size_t padded_len = ((len / 16) + 1) * 16;
+    uint8_t pad = padded_len - len;
 
     memcpy(buffer, password, len);
-    uint8_t pad = padded_len - len;
     for (size_t i = len; i < padded_len; i++) buffer[i] = pad;
 
     AES_init_ctx_iv(&ctx, key, iv);
     AES_CBC_encrypt_buffer(&ctx, buffer, padded_len);
 
-    // Write IV + encrypted password to flash
+    // Write to flash: [ IV (16B) ][ LEN (2B) ][ Encrypted Data ]
     uint32_t addr = FLASH_USER_START_ADDR;
 
-    for (int i = 0; i < 16; i += 2) // write IV
+    // Write IV
+    for (int i = 0; i < 16; i += 2)
     {
         uint16_t halfWord = iv[i] | (iv[i + 1] << 8);
         HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, halfWord);
         addr += 2;
     }
 
-    for (int i = 0; i < padded_len; i += 2) // write ciphertext
+    // Write length (uint16_t)
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, (uint16_t)padded_len);
+    addr += 2;
+
+    // Write encrypted buffer
+    for (int i = 0; i < padded_len; i += 2)
     {
         uint16_t halfWord = buffer[i] | (buffer[i + 1] << 8);
         HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD, addr, halfWord);
@@ -677,7 +683,7 @@ void readPasswordFromFlash(char *password)
 */
 void readPasswordFromFlash(char *outPassword)
 {
-    uint8_t key[16], iv[16], encrypted[64];
+    uint8_t key[16], iv[16], encrypted[64] = {0};
     deriveKeyFromUID(key);
 
     const uint8_t *flash_ptr = (uint8_t *)FLASH_USER_START_ADDR;
@@ -686,31 +692,29 @@ void readPasswordFromFlash(char *outPassword)
     memcpy(iv, flash_ptr, 16);
     flash_ptr += 16;
 
+    // Read length (2 bytes)
+    uint16_t padded_len = flash_ptr[0] | (flash_ptr[1] << 8);
+    flash_ptr += 2;
+
+    if (padded_len > sizeof(encrypted)) padded_len = sizeof(encrypted);  // safety
+
     // Read encrypted data
-    size_t i;
-    for (i = 0; i < 64; i++)
-    {
-        encrypted[i] = flash_ptr[i];
-        // Stop at block boundary with null-padding detection
-        if (i > 0 && encrypted[i] == 0x00 && (i % 16 == 0))
-            break;
-    }
-    size_t len = i;
+    memcpy(encrypted, flash_ptr, padded_len);
 
     // Decrypt
     struct AES_ctx ctx;
     AES_init_ctx_iv(&ctx, key, iv);
-    AES_CBC_decrypt_buffer(&ctx, encrypted, len);
+    AES_CBC_decrypt_buffer(&ctx, encrypted, padded_len);
 
     // Remove PKCS#7 padding
-    uint8_t pad = encrypted[len - 1];
+    uint8_t pad = encrypted[padded_len - 1];
     if (pad <= 16)
     {
-        encrypted[len - pad] = '\0';
+        encrypted[padded_len - pad] = '\0';
     }
     else
     {
-        encrypted[len - 1] = '\0';
+        encrypted[padded_len - 1] = '\0';
     }
 
     strncpy(outPassword, (char *)encrypted, MAX_PWD_SIZE - 1);
