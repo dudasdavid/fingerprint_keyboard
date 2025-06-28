@@ -112,7 +112,7 @@ char storedPassword[MAX_PWD_SIZE];
 
 volatile bool keyboardFlag = false;
 volatile bool enrollFlag = false;
-
+volatile bool saveFlag = false;
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
@@ -895,11 +895,15 @@ void StartCommTask(void *argument)
                   char *pwdStart = (char*)rxBuffer + 4;
                   snprintf((char*)txBuffer, TX_BUFFER_SIZE, "OK:%.50s\n", rxBuffer+4);
                   //build_response(txBuffer, "OK:", pwdStart, 50);
-
+                  saveFlag = true;
+                  osDelay(500);
                   writePasswordToFlash(pwdStart);
                   strncpy(storedPassword, pwdStart, MAX_PWD_SIZE - 1);
                   storedPassword[MAX_PWD_SIZE - 1] = '\0';
+                  osDelay(500);
+                  saveFlag = false;
               }
+              /*
               else if (strncmp((char*)rxBuffer, "READ", 4) == 0)
               {
                   snprintf((char*)txBuffer, TX_BUFFER_SIZE, "READ:%.50s\n", storedPassword);
@@ -911,6 +915,7 @@ void StartCommTask(void *argument)
                   snprintf((char*)txBuffer, TX_BUFFER_SIZE, "SEND:%.50s\n", storedPassword);
                   //build_response(txBuffer, "SEND:", storedPassword, 50);
               }
+              */
               else if (strncmp((char*)rxBuffer, "ENROLL:", 7) == 0)
               {
                   char ch = rxBuffer[7];
@@ -970,7 +975,7 @@ void StartReaderTask(void *argument)
     		osDelay(200);
     		continue;
     	}
-    	if (enrollFlag)
+    	if (enrollFlag || saveFlag)
     	{
     		osDelay(200);
     		continue;
