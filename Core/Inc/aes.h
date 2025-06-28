@@ -11,9 +11,9 @@
 // ECB enables the basic ECB 16-byte block algorithm. All can be enabled simultaneously.
 
 // The #ifndef-guard allows it to be configured before #include'ing or at compile time.
-#define CBC 0
+#define CBC 1
 #define ECB 0
-#define CTR 1
+#define CTR 0
 #ifndef CBC
   #define CBC 1
 #endif
@@ -51,9 +51,6 @@ struct AES_ctx
   uint8_t Iv[AES_BLOCKLEN];
 #endif
 };
-
-void aes_init_sbox(void);
-void aes_init_rsbox(void);
 
 void AES_init_ctx(struct AES_ctx* ctx, const uint8_t* key);
 #if (defined(CBC) && (CBC == 1)) || (defined(CTR) && (CTR == 1))
